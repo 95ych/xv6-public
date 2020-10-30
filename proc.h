@@ -1,3 +1,7 @@
+#define SCHED_RR 0
+#define SCHED_FCFS 1
+#define SCHED_PBS 2
+#define SCHED_MLFQ 3
 // Per-CPU state
 struct cpu {
   uchar apicid;                // Local APIC ID

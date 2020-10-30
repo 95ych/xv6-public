@@ -360,6 +360,34 @@ waitx(int* wtime, int* rtime)                 // modified verision of wait()
     sleep(curproc, &ptable.lock);  //DOC: wait-sleep
   }
 }
+
+int procsinfo(struct proc_stat* ps) {
+    struct proc *p;
+    acquire(&ptable.lock);
+    cprintf("PID\tPriority\tState\tr_time\tw_time\tn_run\tcur_q\tq0 q1 q2 q3 q4")
+    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+        if (p->pid == pid) {
+            ps->pid = p->pid;
+            ps->runtime = p->run_time;
+            ps->num_run = p->num_run;
+#if SCHEDULER == SCHED_MLFQ
+            ps->current_queue = p->queue;
+            for (int i = 0; i < NUM_QUEUES; i++) {
+                ps->ticks[i] = p->ticks[i];
+            }
+#else
+            ps->current_queue = -1;
+            for (int i = 0; i < NUM_QUEUES; i++) {
+                ps->ticks[i] = -1;
+            }
+#endif
+        release(&ptable.lock);
+        return 0;
+        }
+    }
+    release(&ptable.lock);
+    return -1;
+}
 //PAGEBREAK: 42
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -375,6 +403,7 @@ scheduler(void)
   struct cpu *c = mycpu();
   c->proc = 0;
   
+  #if SCHEDULER == SCHED_RR
   for(;;){
     // Enable interrupts on this processor.
     sti();
@@ -400,7 +429,32 @@ scheduler(void)
       c->proc = 0;
     }
     release(&ptable.lock);
+  }
 
+  #elif SCHEDULER == SCHED__FCFS
+  
+  for(;;){
+    sti();
+    int lowesttime = ticks+99999;
+    struct proc* selected_proc;
+    acquire(&ptable.lock);
+    
+    for(p=ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->state!=RUNNABLE){
+        continue;
+      }
+      if(p->ctime<lowesttime){
+        lowesttime = p->ctime;
+        selected_proc =p;
+      }
+    }
+    c->proc=selected_proc; //c proc aka proc to cpu
+    switchuvm(selected_proc);
+    selected_proc->state = RUNNING;
+    switch(&(c->scheduler),selected_proc->context);
+    switchkvm;
+    c->proc = 0;
+    release(&ptable.lock);
   }
 }
 
