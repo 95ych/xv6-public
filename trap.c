@@ -54,7 +54,7 @@ trap(struct trapframe *tf)
       wakeup(&ticks);
       release(&tickslock);
 
-      if(myproc()!=NULL){               //increment run time while running
+      if(myproc()){               //increment run time while running
         if(myproc()->state == RUNNING)
           myproc()->rtime++;
       }
