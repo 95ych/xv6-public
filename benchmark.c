@@ -32,12 +32,12 @@ int main(int argc, char *argv[])
           }
         }
       }
-    //   printf(1, "Process: %d Finished\n", j);
+       printf(1, "Process: %d Finished\n", j);
       exit();
     }
     else{
         ;
-    //   set_priority(100-(20+j),pid); // will only matter for PBS, comment it out if not implemented yet (better priorty for more IO intensive jobs)
+       set_priority(100-(20+j),pid); // will only matter for PBS, comment it out if not implemented yet (better priorty for more IO intensive jobs)
     }
   }
   for (j = 0; j < number_of_processes+5; j++)

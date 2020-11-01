@@ -430,34 +430,39 @@ inc_runtime()
 
 }
 
-// int
-// procsinfo(struct proc_stat* ps) {
-//     struct proc *p;
-//     acquire(&ptable.lock);
-//     cprintf("PID\tPriority\tState\tr_time\tw_time\tn_run\tcur_q\tq0 q1 q2 q3 q4");
-//     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
-//         if (p->pid == pid) {
-//             ps->pid = p->pid;
-//             ps->runtime = p->run_time;
-//             ps->num_run = p->num_run;
-// #if SCHEDULER == SCHED_MLFQ
-//             ps->current_queue = p->queue;
-//             for (int i = 0; i < NUM_QUEUES; i++) {
-//                 ps->ticks[i] = p->ticks[i];
-//             }
-// #else
-//             ps->current_queue = -1;
-//             for (int i = 0; i < NUM_QUEUES; i++) {
-//                 ps->ticks[i] = -1;
-//             }
-// #endif
-//         release(&ptable.lock);
-//         return 0;
-//         }
-//     }
-//     release(&ptable.lock);
-//     return -1;
-// }
+int
+procsinfo() {
+    struct proc *p;
+    acquire(&ptable.lock);
+    cprintf("PID\tPriority\tState\tr_time\tw_time\tn_run\tcur_q\tq0 q1 q2 q3 q4\n");
+    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) 
+    {
+      if(p->state==UNUSED)
+        continue;
+      cprintf("%d\t%d\t\t",p->pid,p->priority);
+      //enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
+      
+      if(p->state==EMBRYO)
+        cprintf("EMBRYO  ");
+      else if(p->state==SLEEPING)
+        cprintf("SLEEPING  ");
+      else if(p->state==RUNNABLE)
+        cprintf("RUNNABLE  ");
+      else if(p->state==RUNNING)
+        cprintf("RUNNING  ");
+      else if(p->state==ZOMBIE)
+        cprintf("ZOMBIE  ");
+      cprintf("%d\t%d\t%d\t",p->rtime,(p->etime - p->ctime) - p->rtime,p->num_run);
+
+      #if SCHEDULER == SCHED_MLFQ
+        cprintf("%d\t%d  %d  %d  %d  %d\n",p->cur_q,p->q[0],p->q[1],p->q[2],p->q[3],p->q[4]);          
+      #else
+        cprintf("-\t-  -  -  -  -\n");
+      #endif
+    }
+    release(&ptable.lock);
+    return 1;
+}
 //PAGEBREAK: 42
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -474,6 +479,7 @@ scheduler(void)
   c->proc = 0;
   
   #if SCHEDULER == SCHED_RR
+  cprintf("THIS IS RR\n");
   for(;;){
     // Enable interrupts on this processor.
     sti();
@@ -490,7 +496,7 @@ scheduler(void)
       c->proc = p;
       switchuvm(p);
       p->state = RUNNING;
-
+      P->num_run++;
       swtch(&(c->scheduler), p->context);
       switchkvm();
 
@@ -524,6 +530,7 @@ scheduler(void)
       c->proc=selected_proc; //c proc aka proc to cpu
       switchuvm(selected_proc);
       selected_proc->state = RUNNING;
+      selected_proc->num_run++;
       swtch(&(c->scheduler), selected_proc->context);
       switchkvm();
       c->proc = 0;
@@ -560,6 +567,7 @@ scheduler(void)
       c->proc = highest_prior_proc;
       switchuvm(highest_prior_proc);
       highest_prior_proc->state = RUNNING;
+      highest_prior_proc->num_run++;
       swtch(&(c->scheduler),highest_prior_proc->context);
       switchkvm();
       c->proc=0;
@@ -569,7 +577,7 @@ scheduler(void)
 
   }
   #elif SCHEDULER == SCHED_MLFQ
-  
+  cprintf("THIS IS MLFQ\n");
   for(;;)
   {
     sti();
@@ -603,7 +611,7 @@ scheduler(void)
 
       }
     }
-
+    struct proc* selected_proc=0;
     for(int i=0;i<5;i++)
     {
       for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)

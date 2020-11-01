@@ -51,9 +51,10 @@ trap(struct trapframe *tf)
     if(cpuid() == 0){
       acquire(&tickslock);
       ticks++;
+      inc_runtime();    //increment run time while running
       wakeup(&ticks);
       release(&tickslock);
-      inc_runtime();                 //increment run time while running
+            
     }
     lapiceoi();
     break;

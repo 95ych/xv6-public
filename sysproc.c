@@ -56,6 +56,12 @@ sys_set_priority(void)
 }
 
 int
+sys_procsinfo(void)
+{
+  return procsinfo();
+}
+
+int
 sys_kill(void)
 {
   int pid;
