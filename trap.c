@@ -52,6 +52,7 @@ trap(struct trapframe *tf)
       acquire(&tickslock);
       ticks++;
       inc_runtime();    //increment run time while running
+      //cprintf("..");
       wakeup(&ticks);
       release(&tickslock);
             

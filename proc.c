@@ -413,10 +413,11 @@ set_priority(int new_priority, int pid){
 void
 inc_runtime()
 {
+  
   acquire(&ptable.lock);
   for(struct proc* p=ptable.proc; p < &ptable.proc[NPROC]; p++)
   {
-    if(p->state == RUNNABLE)
+    if(p->state == RUNNING)
     {
       p->rtime++;
       p->age=ticks;
@@ -443,16 +444,16 @@ procsinfo() {
       //enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
       
       if(p->state==EMBRYO)
-        cprintf("EMBRYO  ");
+        cprintf("EMBRYO    ");
       else if(p->state==SLEEPING)
         cprintf("SLEEPING  ");
       else if(p->state==RUNNABLE)
         cprintf("RUNNABLE  ");
       else if(p->state==RUNNING)
-        cprintf("RUNNING  ");
+        cprintf("RUNNING   ");
       else if(p->state==ZOMBIE)
-        cprintf("ZOMBIE  ");
-      cprintf("%d\t%d\t%d\t",p->rtime,(p->etime - p->ctime) - p->rtime,p->num_run);
+        cprintf("ZOMBIE    ");
+      cprintf("%d\t%d\t%d\t",p->rtime,(ticks - p->ctime) - p->rtime,p->num_run);
 
       #if SCHEDULER == SCHED_MLFQ
         cprintf("%d\t%d  %d  %d  %d  %d\n",p->cur_q,p->q[0],p->q[1],p->q[2],p->q[3],p->q[4]);          
@@ -496,7 +497,7 @@ scheduler(void)
       c->proc = p;
       switchuvm(p);
       p->state = RUNNING;
-      P->num_run++;
+      p->num_run++;
       swtch(&(c->scheduler), p->context);
       switchkvm();
 
