@@ -24,7 +24,7 @@ static void wakeup1(void *chan);
 //MLFQ components 
 int slices_in_q[5] = {1*5, 2*5, 4*5, 8*5, 16*5};
 struct proc* ques[5][1024];
-endq[5];
+int endq[5];
 
 void
 pinit(void)
@@ -94,6 +94,22 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  p->ctime = ticks;    // creation time = current time
+  p->etime = 0;
+  p->rtime = 0;
+  p->priority =60;     // default priority
+  p->timeslices =0;
+  p->age = ticks;
+  for(int i=0;i<5;i++)
+  {
+    p->q[i]=0;
+  }
+  p->num_run=0;
+  #if SCHEDULER == SCHED_MLFQ
+    ques[0][endq[0]++]=p;
+    p->cur_q=0;
+    p->ticks_slice=0;
+  #endif
 
   release(&ptable.lock);
 
@@ -117,23 +133,9 @@ found:
   p->context = (struct context*)sp;
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
+
+  return p;
   
-  p->ctime = ticks;    // creation time = current time
-  p->etime = 0;
-  p->rtime = 0;
-  p->priority =60;     // default priority
-  p->timeslices =0;
-  p->age = ticks;
-  for(int i=0;i<5;i++)
-  {
-    p->q[i]=0;
-  }
-  p->num_run=0;
-  #if SCHEDULER == SCHED_MLFQ
-    ques[0][endq[0]++]=p;
-    p->cur_q=0;
-    p->ticks_slice=0;
-  #endif
 }
 
 
@@ -428,34 +430,34 @@ inc_runtime()
 
 }
 
-int
-procsinfo(struct proc_stat* ps) {
-    struct proc *p;
-    acquire(&ptable.lock);
-    cprintf("PID\tPriority\tState\tr_time\tw_time\tn_run\tcur_q\tq0 q1 q2 q3 q4");
-    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
-        if (p->pid == pid) {
-            ps->pid = p->pid;
-            ps->runtime = p->run_time;
-            ps->num_run = p->num_run;
-#if SCHEDULER == SCHED_MLFQ
-            ps->current_queue = p->queue;
-            for (int i = 0; i < NUM_QUEUES; i++) {
-                ps->ticks[i] = p->ticks[i];
-            }
-#else
-            ps->current_queue = -1;
-            for (int i = 0; i < NUM_QUEUES; i++) {
-                ps->ticks[i] = -1;
-            }
-#endif
-        release(&ptable.lock);
-        return 0;
-        }
-    }
-    release(&ptable.lock);
-    return -1;
-}
+// int
+// procsinfo(struct proc_stat* ps) {
+//     struct proc *p;
+//     acquire(&ptable.lock);
+//     cprintf("PID\tPriority\tState\tr_time\tw_time\tn_run\tcur_q\tq0 q1 q2 q3 q4");
+//     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+//         if (p->pid == pid) {
+//             ps->pid = p->pid;
+//             ps->runtime = p->run_time;
+//             ps->num_run = p->num_run;
+// #if SCHEDULER == SCHED_MLFQ
+//             ps->current_queue = p->queue;
+//             for (int i = 0; i < NUM_QUEUES; i++) {
+//                 ps->ticks[i] = p->ticks[i];
+//             }
+// #else
+//             ps->current_queue = -1;
+//             for (int i = 0; i < NUM_QUEUES; i++) {
+//                 ps->ticks[i] = -1;
+//             }
+// #endif
+//         release(&ptable.lock);
+//         return 0;
+//         }
+//     }
+//     release(&ptable.lock);
+//     return -1;
+// }
 //PAGEBREAK: 42
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.

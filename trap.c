@@ -54,8 +54,6 @@ trap(struct trapframe *tf)
       wakeup(&ticks);
       release(&tickslock);
       inc_runtime();                 //increment run time while running
-
-      }
     }
     lapiceoi();
     break;
