@@ -20,6 +20,12 @@ extern void trapret(void);
 
 static void wakeup1(void *chan);
 
+
+//MLFQ components 
+int slices_in_q[5] = {1*5, 2*5, 4*5, 8*5, 16*5};
+struct proc* ques[5][1024];
+endq[5];
+
 void
 pinit(void)
 {
@@ -117,7 +123,17 @@ found:
   p->rtime = 0;
   p->priority =60;     // default priority
   p->timeslices =0;
-  return p;
+  p->age = ticks;
+  for(int i=0;i<5;i++)
+  {
+    p->q[i]=0;
+  }
+  p->num_run=0;
+  #if SCHEDULER == SCHED_MLFQ
+    ques[0][endq[0]++]=p;
+    p->cur_q=0;
+    p->ticks_slice=0;
+  #endif
 }
 
 
@@ -392,34 +408,54 @@ set_priority(int new_priority, int pid){
   return oldpriority;
 }
 
-// int
-// procsinfo(struct proc_stat* ps) {
-//     struct proc *p;
-//     acquire(&ptable.lock);
-//     cprintf("PID\tPriority\tState\tr_time\tw_time\tn_run\tcur_q\tq0 q1 q2 q3 q4");
-//     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
-//         if (p->pid == pid) {
-//             ps->pid = p->pid;
-//             ps->runtime = p->run_time;
-//             ps->num_run = p->num_run;
-// #if SCHEDULER == SCHED_MLFQ
-//             ps->current_queue = p->queue;
-//             for (int i = 0; i < NUM_QUEUES; i++) {
-//                 ps->ticks[i] = p->ticks[i];
-//             }
-// #else
-//             ps->current_queue = -1;
-//             for (int i = 0; i < NUM_QUEUES; i++) {
-//                 ps->ticks[i] = -1;
-//             }
-// #endif
-//         release(&ptable.lock);
-//         return 0;
-//         }
-//     }
-//     release(&ptable.lock);
-//     return -1;
-// }
+void
+inc_runtime()
+{
+  acquire(&ptable.lock);
+  for(struct proc* p=ptable.proc; p < &ptable.proc[NPROC]; p++)
+  {
+    if(p->state == RUNNABLE)
+    {
+      p->rtime++;
+      p->age=ticks;
+      #if SCHEDULER == SCHED_MLFQ
+        p->ticks_slice++;
+        p->q[p->cur_q]++;
+      #endif
+    }
+  }
+  release(&ptable.lock);
+
+}
+
+int
+procsinfo(struct proc_stat* ps) {
+    struct proc *p;
+    acquire(&ptable.lock);
+    cprintf("PID\tPriority\tState\tr_time\tw_time\tn_run\tcur_q\tq0 q1 q2 q3 q4");
+    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+        if (p->pid == pid) {
+            ps->pid = p->pid;
+            ps->runtime = p->run_time;
+            ps->num_run = p->num_run;
+#if SCHEDULER == SCHED_MLFQ
+            ps->current_queue = p->queue;
+            for (int i = 0; i < NUM_QUEUES; i++) {
+                ps->ticks[i] = p->ticks[i];
+            }
+#else
+            ps->current_queue = -1;
+            for (int i = 0; i < NUM_QUEUES; i++) {
+                ps->ticks[i] = -1;
+            }
+#endif
+        release(&ptable.lock);
+        return 0;
+        }
+    }
+    release(&ptable.lock);
+    return -1;
+}
 //PAGEBREAK: 42
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -530,18 +566,72 @@ scheduler(void)
     release(&ptable.lock);
 
   }
-  // #elif SCHEDULER == SCHED__MLFQ
+  #elif SCHEDULER == SCHED_MLFQ
   
-  // for(;;)
-  // {
-  //   sti();
-  //   acquire(&ptable.lock);
-  //   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-  //   {
-  //     if(p->)
-  //   }
+  for(;;)
+  {
+    sti();
+    acquire(&ptable.lock);
 
-  // }
+    //demoting expired processes
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+    {
+      if(p->state!=RUNNABLE)
+        continue;
+      if(p->ticks_slice>= slices_in_q[p->cur_q])
+      {
+        if(p->cur_q!=4){
+          p->cur_q++;
+          p->ticks_slice=0;
+        }
+      }
+    }
+
+    //promote worthy processes
+    for(p= ptable.proc; p < &ptable.proc[NPROC]; p++)
+    {
+      if(p->state != RUNNABLE)
+        continue;
+      if(ticks - p->age > 1000)
+      {
+        if(p->cur_q){
+          p->cur_q--;
+          p->ticks_slice=0;
+        }
+
+      }
+    }
+
+    for(int i=0;i<5;i++)
+    {
+      for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+      {
+        if(p->state != RUNNABLE)
+          continue;
+
+        if(i==p->cur_q)
+        {
+          selected_proc=p;
+          goto runproc;
+        }
+      }
+    }
+
+    runproc:
+      if(selected_proc)
+      {
+        selected_proc->num_run++;
+        c->proc =selected_proc;
+        switchuvm(selected_proc);
+        selected_proc->state = RUNNING;
+        swtch(&(c->scheduler), selected_proc->context);
+        switchkvm();
+        c->proc = 0;
+      }
+
+      release(&ptable.lock);
+
+  }
   #endif
 }
 

@@ -58,6 +58,11 @@ struct proc {
   int rtime;                     // total run time
   int priority;                  // priority of process to be executed
   int timeslices;                //No. of cpu timeslices
+  int num_run;
+  int q[5];
+  int cur_q;                  //
+  int age;
+  int ticks_slice;
 };
 
 // Process memory is laid out contiguously, low addresses first:
