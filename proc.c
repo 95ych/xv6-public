@@ -115,6 +115,8 @@ found:
   p->ctime = ticks;    // creation time = current time
   p->etime = 0;
   p->rtime = 0;
+  p->priority =60;     // default priority
+  p->timeslices =0;
   return p;
 }
 
@@ -361,33 +363,63 @@ waitx(int* wtime, int* rtime)                 // modified verision of wait()
   }
 }
 
-int procsinfo(struct proc_stat* ps) {
-    struct proc *p;
-    acquire(&ptable.lock);
-    cprintf("PID\tPriority\tState\tr_time\tw_time\tn_run\tcur_q\tq0 q1 q2 q3 q4")
-    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
-        if (p->pid == pid) {
-            ps->pid = p->pid;
-            ps->runtime = p->run_time;
-            ps->num_run = p->num_run;
-#if SCHEDULER == SCHED_MLFQ
-            ps->current_queue = p->queue;
-            for (int i = 0; i < NUM_QUEUES; i++) {
-                ps->ticks[i] = p->ticks[i];
-            }
-#else
-            ps->current_queue = -1;
-            for (int i = 0; i < NUM_QUEUES; i++) {
-                ps->ticks[i] = -1;
-            }
-#endif
-        release(&ptable.lock);
-        return 0;
-        }
+int
+set_priority(int new_priority, int pid){
+  if(new_priority>100 || new_priority<0)
+    return -1;
+
+  acquire(&ptable.lock);
+  int pid_valid_flag=0;
+  struct proc *p;
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+    if (p->pid == pid){
+      pid_valid_flag=1;
+      break;
     }
+
+  if(pid_valid_flag==0){
     release(&ptable.lock);
     return -1;
+  }
+
+  int oldpriority = p->priority;
+  p->priority = new_priority;
+  release(&ptable.lock);
+  
+  if (new_priority < oldpriority)  //if priority is lifted up, reschedule it
+    yield();
+
+  return oldpriority;
 }
+
+// int
+// procsinfo(struct proc_stat* ps) {
+//     struct proc *p;
+//     acquire(&ptable.lock);
+//     cprintf("PID\tPriority\tState\tr_time\tw_time\tn_run\tcur_q\tq0 q1 q2 q3 q4");
+//     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+//         if (p->pid == pid) {
+//             ps->pid = p->pid;
+//             ps->runtime = p->run_time;
+//             ps->num_run = p->num_run;
+// #if SCHEDULER == SCHED_MLFQ
+//             ps->current_queue = p->queue;
+//             for (int i = 0; i < NUM_QUEUES; i++) {
+//                 ps->ticks[i] = p->ticks[i];
+//             }
+// #else
+//             ps->current_queue = -1;
+//             for (int i = 0; i < NUM_QUEUES; i++) {
+//                 ps->ticks[i] = -1;
+//             }
+// #endif
+//         release(&ptable.lock);
+//         return 0;
+//         }
+//     }
+//     release(&ptable.lock);
+//     return -1;
+// }
 //PAGEBREAK: 42
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -430,32 +462,87 @@ scheduler(void)
     }
     release(&ptable.lock);
   }
-
-  #elif SCHEDULER == SCHED__FCFS
-  
+  #elif SCHEDULER == SCHED_FCFS
+  cprintf("THIS IS FCFS\n");
   for(;;){
     sti();
     int lowesttime = ticks+99999;
-    struct proc* selected_proc;
+    struct proc* selected_proc=0;
     acquire(&ptable.lock);
     
     for(p=ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state!=RUNNABLE){
         continue;
       }
+      if(!selected_proc)
+        selected_proc=p;
+
       if(p->ctime<lowesttime){
         lowesttime = p->ctime;
         selected_proc =p;
       }
     }
-    c->proc=selected_proc; //c proc aka proc to cpu
-    switchuvm(selected_proc);
-    selected_proc->state = RUNNING;
-    switch(&(c->scheduler),selected_proc->context);
-    switchkvm;
-    c->proc = 0;
+    if(selected_proc){
+      c->proc=selected_proc; //c proc aka proc to cpu
+      switchuvm(selected_proc);
+      selected_proc->state = RUNNING;
+      swtch(&(c->scheduler), selected_proc->context);
+      switchkvm();
+      c->proc = 0;
+    }
     release(&ptable.lock);
   }
+
+  #elif SCHEDULER == SCHED_PBS
+  cprintf("THIS IS PBS\n");
+  for(;;)
+  {
+    sti();
+    acquire(&ptable.lock);
+    struct proc *highest_prior_proc=0;
+    int highest_priority = 101;
+    for(p=ptable.proc; p < &ptable.proc[NPROC]; p++)
+    {
+      if(p->state != RUNNABLE)
+        continue;
+      
+      if(!highest_priority){
+        highest_prior_proc = p;  // if highest_prior_proc not assigned , assign to current proc
+        highest_priority = highest_prior_proc->priority;
+      }
+      
+      else if(p->priority < highest_priority){  //priorities are like ranks
+        highest_prior_proc = p;    // if current proc priority > highest_priority assign to it
+        highest_priority = highest_prior_proc->priority;
+      }
+      // now we got our highest_prior_proc , lets proceed
+    }
+
+    if(highest_prior_proc){
+      c->proc = highest_prior_proc;
+      switchuvm(highest_prior_proc);
+      highest_prior_proc->state = RUNNING;
+      swtch(&(c->scheduler),highest_prior_proc->context);
+      switchkvm();
+      c->proc=0;
+    }
+
+    release(&ptable.lock);
+
+  }
+  // #elif SCHEDULER == SCHED__MLFQ
+  
+  // for(;;)
+  // {
+  //   sti();
+  //   acquire(&ptable.lock);
+  //   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+  //   {
+  //     if(p->)
+  //   }
+
+  // }
+  #endif
 }
 
 // Enter scheduler.  Must hold only ptable.lock

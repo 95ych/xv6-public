@@ -23,7 +23,7 @@ int main(int argc, char *argv[])
         {
             printf(2,"No children exist\n");
         }
-        else printf(1, "For pid %d\nRun Time = %d   Wait time= %d\n",pid, runtime, waittime);
+        else printf(1, "-----------------------\nFor pid %d\nRun Time = %d   Wait time= %d\n",pid, runtime, waittime);
         exit();
     }
 } 

@@ -94,6 +94,9 @@ SCHED_MACRO = -D SCHEDULER=SCHED_RR
 ifeq ($(SCHEDULER), FCFS)
 SCHED_MACRO = -D SCHEDULER=SCHED_FCFS
 endif
+ifeq ($(SCHEDULER), PBS)
+SCHED_MACRO = -D SCHEDULER=SCHED_PBS
+endif
 
 CFLAGS += $(SCHED_MACRO)
 
@@ -189,6 +192,7 @@ UPROGS=\
 	_wc\
 	_zombie\
 	_time\
+	_setPriority\
 
 fs.img: mkfs README $(UPROGS)
 	./mkfs fs.img README $(UPROGS)
@@ -258,7 +262,7 @@ qemu-nox-gdb: fs.img xv6.img .gdbinit
 EXTRA=\
 	mkfs.c ulib.c user.h cat.c echo.c forktest.c grep.c kill.c\
 	ln.c ls.c mkdir.c rm.c stressfs.c usertests.c wc.c zombie.c\
-	printf.c umalloc.c time.c\
+	printf.c umalloc.c time.c setPriority.c\
 	README dot-bochsrc *.pl toc.* runoff runoff1 runoff.list\
 	.gdbinit.tmpl gdbutil\
 
