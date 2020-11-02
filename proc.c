@@ -426,13 +426,16 @@ inc_runtime()
     {
       p->rtime++; 
       p->age=ticks;
+      #if SCHEDULER == SCHED_MLFQ
+        p->q[p->cur_q]++;
+        p->ticks_slice++;
+      #endif      
     }
     if(p->state== SLEEPING)
       p->iotime++;
     else if (p->state ==RUNNABLE){ // when in queue waiting for cpu
      #if SCHEDULER == SCHED_MLFQ
-        p->ticks_slice++;
-        p->q[p->cur_q]++;
+        
       #endif
     }
   }
@@ -462,14 +465,14 @@ procsinfo() {
         cprintf("RUNNING   ");
       else if(p->state==ZOMBIE)
         cprintf("ZOMBIE    ");
-      cprintf("%d\t%d\t%d\t",p->rtime,ticks - p->age,p->num_run);
+      cprintf("%d\t%d\t%d\t",p->rtime,ticks-p->age,p->num_run);
 
       #if SCHEDULER == SCHED_MLFQ
         cprintf("%d\t%d  %d  %d  %d  %d\n",p->cur_q,p->q[0],p->q[1],p->q[2],p->q[3],p->q[4]);          
       #else
         cprintf("-\t-  -  -  -  -\n");
       #endif
-      cprintf("ticks_slice-%d\n",p->ticks_slice);
+      //cprintf("ticks_slice-%d\n",p->ticks_slice);
     }
     release(&ptable.lock);
     return 1;
