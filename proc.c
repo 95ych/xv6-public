@@ -23,8 +23,9 @@ static void wakeup1(void *chan);
 
 //MLFQ components 
 int slices_in_q[5] = {1*5, 2*5, 4*5, 8*5, 16*5};
-struct proc* ques[5][1024];
-int endq[5];
+struct proc* ques[5][NPROC];
+int startq[5]={-1,-1,-1,-1,-1};
+int endq[5]={-1,-1,-1,-1,-1};
 
 void
 pinit(void)
@@ -97,17 +98,18 @@ found:
   p->ctime = ticks;    // creation time = current time
   p->etime = 0;
   p->rtime = 0;
+  p->iotime=0;
   p->priority =60;     // default priority
-  p->timeslices =0;
-  p->age = ticks;
-  for(int i=0;i<5;i++)
-  {
-    p->q[i]=0;
-  }
-  p->num_run=0;
   #if SCHEDULER == SCHED_MLFQ
-    ques[0][endq[0]++]=p;
-    p->cur_q=0;
+    p->age = ticks;
+    for(int i=0;i<5;i++)
+    {
+      p->q[i]=0;
+    }
+    p->num_run=0;
+    ques[0][++endq[0]]=p;
+    startq[0]=0
+;    p->cur_q=0;
     p->ticks_slice=0;
   #endif
 
@@ -241,8 +243,11 @@ fork(void)
 
   np->state = RUNNABLE;
 
+  #if SCHEDULER == SCHED_MLFQ
+    ques[0][++endq[0]]=np;
+    startq[0] =0;
+  #endif
   release(&ptable.lock);
-
   return pid;
 }
 
@@ -355,7 +360,7 @@ waitx(int* wtime, int* rtime)                 // modified verision of wait()
       if(p->state == ZOMBIE){
         // Found one.
         *rtime= p->rtime;                         //update rtime and wtime;
-        *wtime=(p->etime - p->ctime) - p->rtime; 
+        *wtime=(p->etime - p->ctime) - p->rtime -p->iotime; 
         pid = p->pid;
         kfree(p->kstack);
         p->kstack = 0;
@@ -419,9 +424,13 @@ inc_runtime()
   {
     if(p->state == RUNNING)
     {
-      p->rtime++;
+      p->rtime++; 
       p->age=ticks;
-      #if SCHEDULER == SCHED_MLFQ
+    }
+    if(p->state== SLEEPING)
+      p->iotime++;
+    else if (p->state ==RUNNABLE){ // when in queue waiting for cpu
+     #if SCHEDULER == SCHED_MLFQ
         p->ticks_slice++;
         p->q[p->cur_q]++;
       #endif
@@ -453,13 +462,14 @@ procsinfo() {
         cprintf("RUNNING   ");
       else if(p->state==ZOMBIE)
         cprintf("ZOMBIE    ");
-      cprintf("%d\t%d\t%d\t",p->rtime,(ticks - p->ctime) - p->rtime,p->num_run);
+      cprintf("%d\t%d\t%d\t",p->rtime,ticks - p->age,p->num_run);
 
       #if SCHEDULER == SCHED_MLFQ
         cprintf("%d\t%d  %d  %d  %d  %d\n",p->cur_q,p->q[0],p->q[1],p->q[2],p->q[3],p->q[4]);          
       #else
         cprintf("-\t-  -  -  -  -\n");
       #endif
+      cprintf("ticks_slice-%d\n",p->ticks_slice);
     }
     release(&ptable.lock);
     return 1;
@@ -552,7 +562,7 @@ scheduler(void)
       if(p->state != RUNNABLE)
         continue;
       
-      if(!highest_priority){
+      if(highest_priority==101){
         highest_prior_proc = p;  // if highest_prior_proc not assigned , assign to current proc
         highest_priority = highest_prior_proc->priority;
       }
@@ -583,7 +593,6 @@ scheduler(void)
   {
     sti();
     acquire(&ptable.lock);
-
     //demoting expired processes
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     {
@@ -592,8 +601,23 @@ scheduler(void)
       if(p->ticks_slice>= slices_in_q[p->cur_q])
       {
         if(p->cur_q!=4){
-          p->cur_q++;
+          int t = p->cur_q;
+          int i=0;
+          for(i=0;i <= endq[t];i++)
+          {
+            if(ques[t][i]==p) break;
+          }
+          //pop that process out of queue
+          for(int j=i;j <=endq[t]-1;j++)
+          {
+            ques[t][j]=ques[t][j+1];
+          }
+          endq[t]--;
           p->ticks_slice=0;
+          p->age=ticks;
+          //add to lower queue
+          t=++p->cur_q;
+          ques[t][++endq[t]]=p;
         }
       }
     }
@@ -606,8 +630,24 @@ scheduler(void)
       if(ticks - p->age > 1000)
       {
         if(p->cur_q){
-          p->cur_q--;
+          int t = p->cur_q;
+          int i=0;
+          for(i=0;i <= endq[t];i++)
+          {
+            if(ques[t][i]==p) break;
+          }
+          //pop that process out of queue
+          for(int j=i;j <=endq[t]-1;j++)
+          {
+            ques[t][j]=ques[t][j+1];
+          }
+          endq[t]--;
           p->ticks_slice=0;
+          p->age=ticks;
+          p->cur_q--;
+          //add to higher queue
+          t=p->cur_q;
+          ques[t][++endq[t]]=p;
         }
 
       }
@@ -615,16 +655,18 @@ scheduler(void)
     struct proc* selected_proc=0;
     for(int i=0;i<5;i++)
     {
-      for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+      if(endq[i]==-1)
+        continue;
+      for(p= ptable.proc; p < &ptable.proc[NPROC]; p++)
       {
         if(p->state != RUNNABLE)
           continue;
-
-        if(i==p->cur_q)
-        {
+        
+        if(p->cur_q==i){
           selected_proc=p;
           goto runproc;
         }
+        
       }
     }
 
@@ -632,12 +674,40 @@ scheduler(void)
       if(selected_proc)
       {
         selected_proc->num_run++;
+        p=selected_proc;
+        //pop it out from queue---
+        int t = p->cur_q;     // selected_proc = p
+        int i=0;
+        for(i=0;i <= endq[t];i++)
+        {
+    
+          if(ques[t][i]==p) break;
+        }
+        for(int j=i;j <=endq[t]-1;j++)
+        {
+          ques[t][j]=ques[t][j+1];
+        }
+        endq[t]--;
+        p->ticks_slice=0;
+        p->age=ticks;
+        //--------
         c->proc =selected_proc;
         switchuvm(selected_proc);
         selected_proc->state = RUNNING;
         swtch(&(c->scheduler), selected_proc->context);
         switchkvm();
         c->proc = 0;
+
+
+
+        //in case of voluntary relinquishment and if still runnable,  rejoin same queue
+        if(selected_proc->state ==RUNNABLE){
+          p->age=ticks;
+          p->ticks_slice=0;
+          ques[t][++endq[t]]=p;
+        }
+
+
       }
 
       release(&ptable.lock);
@@ -751,8 +821,15 @@ wakeup1(void *chan)
   struct proc *p;
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    if(p->state == SLEEPING && p->chan == chan)
+    if(p->state == SLEEPING && p->chan == chan){
       p->state = RUNNABLE;
+      #if SCHEDULER== SCHED_MLFQ
+        ques[p->cur_q][++endq[p->cur_q]]=p;
+        p->ticks_slice=0;
+        p->age=0;
+      #endif
+    }
+
 }
 
 // Wake up all processes sleeping on chan.
@@ -777,8 +854,15 @@ kill(int pid)
     if(p->pid == pid){
       p->killed = 1;
       // Wake process from sleep if necessary.
-      if(p->state == SLEEPING)
+      if(p->state == SLEEPING){
         p->state = RUNNABLE;
+      #if SCHEDULER== SCHED_MLFQ
+        ques[p->cur_q][++endq[p->cur_q]]=p;
+        p->ticks_slice=0;
+        p->age=0;
+      #endif
+
+      }
       release(&ptable.lock);
       return 0;
     }

@@ -56,8 +56,8 @@ struct proc {
   int ctime;                   // create time                  
   int etime;                    // end time
   int rtime;                     // total run time
+  int iotime;                     //for io time
   int priority;                  // priority of process to be executed
-  int timeslices;                //No. of cpu timeslices
   int num_run;
   int q[5];
   int cur_q;                  //
