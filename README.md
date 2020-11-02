@@ -1,6 +1,7 @@
 ## How to run:
 `make qemu SCHEDULER=<type>`
-<type> can be RR, FCFS, PBS, MLFQ 
+
+`<type>` can be RR, FCFS, PBS, MLFQ 
 
  most of the implementations are done in proc.c with respective comments explaination
 
@@ -20,7 +21,7 @@ and run by priority queue order following promotions and demotions of queues bas
 
 
 
-
+----------------------------------------------------------------------------------------------------------
 
 NOTE: we have stopped maintaining the x86 version of xv6, and switched
 our efforts to the RISC-V version
