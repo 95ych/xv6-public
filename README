@@ -1,3 +1,27 @@
+## How to run:
+`make qemu SCHEDULER=<type>`
+<type> can be RR, FCFS, PBS, MLFQ 
+
+ most of the implementations are done in proc.c with respective comments explaination
+
+## waitx implementation
+wtime was formulated as (etime-ctime) -rtime -iotime; i.e total interval - runtime - io time;
+
+## FCFS
+each time the processs with least ctime was selected and sent to cpu
+
+## PBS
+process with highest priority (least value) is selected everytime and executed.
+
+## MLFQ
+5 queues of processes are implemented based on priority,
+and run by priority queue order following promotions and demotions of queues based on time alloted.
+ respecive explanation of code implementation written in proc.c
+
+
+
+
+
 NOTE: we have stopped maintaining the x86 version of xv6, and switched
 our efforts to the RISC-V version
 (https://github.com/mit-pdos/xv6-riscv.git)
